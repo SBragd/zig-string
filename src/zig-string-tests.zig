@@ -3,8 +3,7 @@ const expect = std.testing.expect;
 const expectEqual = std.testing.expectEqual;
 const expectEqualStrings = std.testing.expectEqualStrings;
 
-const zig_string = @import("root.zig");
-const String = zig_string.String;
+const String = @import("root.zig").String(0);
 
 test "Basic Usage" {
     // Create your String
@@ -17,7 +16,7 @@ test "Basic Usage" {
     try myString.concat(", World 🔥");
 
     // Success!
-    try expect(myString.cmp("🔥 Hello, World 🔥"));
+    try expect(myString.eql("🔥 Hello, World 🔥"));
 }
 
 test "String Tests" {
@@ -26,14 +25,14 @@ test "String Tests" {
     defer myStr.deinit();
 
     // allocate & capacity
-    try myStr.allocate(16);
-    try expectEqual(myStr.capacity(), 16);
+    try myStr.allocate(32);
+    try expectEqual(myStr.capacity(), 32);
     try expectEqual(myStr.size, 0);
 
     // truncate
     try myStr.truncate();
-    try expectEqual(myStr.capacity(), myStr.size);
-    try expectEqual(myStr.capacity(), 0);
+    try expectEqual(myStr.capacity(), @sizeOf(?[]u8));
+    try expectEqual(myStr.size, 0);
 
     // concat
     try myStr.concat("A");
@@ -50,9 +49,9 @@ test "String Tests" {
     try expectEqualStrings(myStr.pop().?, "o");
     try expectEqual(myStr.len(), 7);
 
-    // str & cmp
-    try expect(myStr.cmp("A\u{5360}💯Hell"));
-    try expect(myStr.cmp(myStr.str()));
+    // str & eql
+    try expect(myStr.eql("A\u{5360}💯Hell"));
+    try expect(myStr.eql(myStr.str()));
 
     // charAt
     try expectEqualStrings(myStr.charAt(2).?, "💯");
@@ -62,7 +61,7 @@ test "String Tests" {
     // insert
     try myStr.insert("🔥", 1);
     try expectEqualStrings(myStr.charAt(1).?, "🔥");
-    try expect(myStr.cmp("A🔥\u{5360}💯Hell"));
+    try expect(myStr.eql("A🔥\u{5360}💯Hell"));
 
     // find
     try expectEqual(myStr.find("🔥").?, 1);
@@ -71,36 +70,36 @@ test "String Tests" {
 
     // remove & removeRange
     try myStr.removeRange(0, 3);
-    try expect(myStr.cmp("💯Hell"));
+    try expect(myStr.eql("💯Hell"));
     try myStr.remove(myStr.len() - 1);
-    try expect(myStr.cmp("💯Hel"));
+    try expect(myStr.eql("💯Hel"));
 
     const whitelist = [_]u8{ ' ', '\t', '\n', '\r' };
 
     // trimStart
     try myStr.insert("      ", 0);
     myStr.trimStart(whitelist[0..]);
-    try expect(myStr.cmp("💯Hel"));
+    try expect(myStr.eql("💯Hel"));
 
     // trimEnd
     _ = try myStr.concat("lo💯\n      ");
     myStr.trimEnd(whitelist[0..]);
-    try expect(myStr.cmp("💯Hello💯"));
+    try expect(myStr.eql("💯Hello💯"));
 
     // clone
     var testStr = try myStr.clone();
     defer testStr.deinit();
-    try expect(testStr.cmp(myStr.str()));
+    try expect(testStr.eql(myStr.str()));
 
     // reverse
     myStr.reverse();
-    try expect(myStr.cmp("💯olleH💯"));
+    try expect(myStr.eql("💯olleH💯"));
     myStr.reverse();
-    try expect(myStr.cmp("💯Hello💯"));
+    try expect(myStr.eql("💯Hello💯"));
 
     // repeat
     try myStr.repeat(2);
-    try expect(myStr.cmp("💯Hello💯💯Hello💯💯Hello💯"));
+    try expect(myStr.eql("💯Hello💯💯Hello💯💯Hello💯"));
 
     // isEmpty
     try expect(!myStr.isEmpty());
@@ -163,20 +162,20 @@ test "String Tests" {
     };
 
     try expectEqual(linesSlice.len, 3);
-    try expect(linesSlice[0].cmp("Line0"));
-    try expect(linesSlice[1].cmp("Line1"));
-    try expect(linesSlice[2].cmp("Line2"));
+    try expect(linesSlice[0].eql("Line0"));
+    try expect(linesSlice[1].eql("Line1"));
+    try expect(linesSlice[2].eql("Line2"));
 
     // toLowercase & toUppercase
     myStr.toUppercase();
-    try expect(myStr.cmp("💯HELLO💯💯HELLO💯💯HELLO💯"));
+    try expect(myStr.eql("💯HELLO💯💯HELLO💯💯HELLO💯"));
     myStr.toLowercase();
-    try expect(myStr.cmp("💯hello💯💯hello💯💯hello💯"));
+    try expect(myStr.eql("💯hello💯💯hello💯💯hello💯"));
 
     // substr
     var subStr = try myStr.substr(0, 7);
     defer subStr.deinit();
-    try expect(subStr.cmp("💯hello💯"));
+    try expect(subStr.eql("💯hello💯"));
 
     // clear
     myStr.clear();
@@ -208,7 +207,7 @@ test "String Tests" {
     // setStr
     const contents = "setStr Test!";
     try myStr.setStr(contents);
-    try expect(myStr.cmp(contents));
+    try expect(myStr.eql(contents));
 
     // non ascii supports in windows
     // try expectEqual(std.os.windows.kernel32.GetConsoleOutputCP(), 65001);
@@ -254,7 +253,8 @@ test "replace Tests" {
     try myString.concat("hi,how are you");
     var result = try myString.replace("hi,", "");
     try expect(result);
-    try expectEqualStrings(myString.str(), "how are you");
+    const s = myString.str();
+    try expectEqualStrings(s, "how are you");
 
     result = try myString.replace("abc", " ");
     try expect(!result);
@@ -289,15 +289,29 @@ test "includes Tests" {
     defer needle.deinit();
 
     try expect(myString.includesLiteral("and"));
-    try expect(myString.includesString(needle));
+    try expect(myString.includesString(&needle));
 
     try needle.concat("t");
 
     try expect(myString.includesLiteral("tiger") == false);
-    try expect(myString.includesString(needle) == false);
+    try expect(myString.includesString(&needle) == false);
 
     needle.clear();
 
     try expect(myString.includesLiteral("") == false);
-    try expect(myString.includesString(needle) == false);
+    try expect(myString.includesString(&needle) == false);
+}
+
+test "cmp and eql Test" {
+    var myString = try String.init_with_contents(std.testing.allocator, "aba");
+    defer myString.deinit();
+    var otherString = try String.init_with_contents(std.testing.allocator, "bab");
+    defer myString.deinit();
+
+    try expect(myString.eql(myString.str()));
+    try expect(!myString.eqlString(&otherString));
+    try expect(myString.cmp(otherString.str()) == .lt);
+    try expect(myString.cmpString(&otherString) == .lt);
+    try expect(myString.cmp(myString.str()) == .eq);
+    try expect(myString.cmpString(&myString) == .eq);
 }
