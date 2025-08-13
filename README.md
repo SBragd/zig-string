@@ -10,7 +10,7 @@ Also it may be useful for some people who need it (including myself), with futur
 
 ```zig
 const std = @import("std");
-const String = @import("zig-string.zig").String;
+const String = @import("zig-string.zig").String(0);
 // ...
 
 // Use your favorite allocator
