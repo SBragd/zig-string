@@ -2,17 +2,23 @@ const std = @import("std");
 const assert = std.debug.assert;
 const builtin = @import("builtin");
 
+pub const options = struct {
+    /// Buffer to be part of the struct itself.
+    /// Defaults to the size of the pointer itself.
+    short_string_size: usize = @sizeOf(?[]u8),
+};
+
 /// A variable length collection of characters.
 /// The String is implemented as a german string-esque with a [N]u8
 /// that is baked into the String struct itself e.g: <allocator, size, <tag<[N]u8|[]u8>>>
 /// Its not quite a german string as it has the tag for the state which takes space, and the allocator vtable
 /// for managing the memory, but its close enough.
 /// The point is not to optimize the size of the struct, but instead to remove unnecessary allocations.
-/// where the capacity of the slice is stored together with the data.
 ///
-/// short_string_size: Size of preallocated buffer
-pub fn String(short_string_size: usize) type {
-    const buf_size = @max(short_string_size, @sizeOf(?[]u8));
+/// opt: options for this instance of the type
+pub fn String(opt: options) type {
+    // We can always fit at least as many string bytes where the pointer goes as the size of the pointer.
+    const buf_size = @max(opt.short_string_size, @sizeOf(?[]u8));
     return struct {
         const Self = @This();
 
@@ -82,6 +88,11 @@ pub fn String(short_string_size: usize) type {
                 },
                 .buffer => return,
             }
+        }
+
+        // Return true if current string is allocated using allocator
+        pub fn allocated(self: *const Self) bool {
+            return self.buffer == .alloced;
         }
 
         /// Returns the size of the internal buffer
@@ -202,7 +213,6 @@ pub fn String(short_string_size: usize) type {
             return ret;
         }
 
-
         /// Executes equality check between this String with a string literal
         pub fn eql(self: *const Self, literal: []const u8) bool {
             const buffer = self.rawBufBytesConst();
@@ -218,7 +228,7 @@ pub fn String(short_string_size: usize) type {
 
         /// Lexically compares this String with a string literal
         pub fn cmp(self: *const Self, literal: []const u8) std.math.Order{
-            const buffer = self.rawBufBytesConst();
+              const buffer = self.rawBufBytesConst();
             return std.mem.order(u8, buffer[0..self.size], literal);
         }
 
@@ -674,6 +684,26 @@ pub fn String(short_string_size: usize) type {
             const found_index = std.mem.indexOf(u8, buffer[0..self.size], needle);
             if (found_index == null) return false;
             return true;
+        }
+
+        /// Assign a buffer allocated with allocator to self.
+        /// This moves the ownership of the buf and the buf must not be freed by user after this.
+        /// Use setStr() to assign a copy.
+        ///
+        /// Allocator is the allocator used to manage the buf, overwrites current allocator of self.
+        /// Old buffer is freed and must not be used after this.
+        pub fn assignBuf(self: *Self, allocator: std.mem.Allocator, buf: []u8) !void {
+            switch (self.buffer) {
+                .alloced => |*a| {
+                    self.allocator.free(a.*);
+                    a.* = buf;
+                },
+                .buffer => |_| {
+                    self.buffer = .{ .alloced = buf };
+                },
+            }
+            self.size = buf.len;
+            self.allocator = allocator;
         }
     };
 }
