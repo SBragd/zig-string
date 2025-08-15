@@ -3,7 +3,7 @@ const expect = std.testing.expect;
 const expectEqual = std.testing.expectEqual;
 const expectEqualStrings = std.testing.expectEqualStrings;
 
-const String = @import("root.zig").String(0);
+const String = @import("root.zig").String(.{});
 
 test "Basic Usage" {
     // Create your String
@@ -314,4 +314,42 @@ test "cmp and eql Test" {
     try expect(myString.cmpString(&otherString) == .lt);
     try expect(myString.cmp(myString.str()) == .eq);
     try expect(myString.cmpString(&myString) == .eq);
+}
+
+test "assign Buf" {
+    // Create your String
+    var debug_allocator = std.heap.DebugAllocator(.{}){};
+    defer expect(debug_allocator.deinit() == .ok) catch @panic("leak");
+
+    const gpa = debug_allocator.allocator();
+
+    var myString = try String.init_with_contents(std.testing.allocator, "Short string");
+    defer myString.deinit();
+    try expect(!myString.allocated());
+
+    // First go from buffer allocated
+    const first_buf = try std.testing.allocator.alloc(u8, 128);
+    const a_str = &[_]u8{'a'} ** 128;
+    std.mem.copyForwards(u8, first_buf, a_str);
+    try myString.assignBuf(std.testing.allocator, first_buf);
+
+    try expect(myString.allocated());
+    try expect(myString.eql(&[_]u8{'a'} ** 128));
+
+    // Second go from allocated to allocated
+    const second_buf = try std.testing.allocator.alloc(u8, 128);
+    const b_str = &[_]u8{'b'} ** 128;
+    std.mem.copyForwards(u8, second_buf, b_str);
+    try myString.assignBuf(std.testing.allocator, second_buf);
+    try expect(myString.allocated());
+    try expect(myString.eql(&[_]u8{'b'} ** 128));
+
+    // Third use another allocator
+    const third_buf = try gpa.alloc(u8, 128);
+    const c_str = &[_]u8{'c'} ** 128;
+    std.mem.copyForwards(u8, third_buf, c_str);
+    try myString.assignBuf(gpa, third_buf);
+
+    try expect(myString.allocated());
+    try expect(myString.eql(&[_]u8{'c'} ** 128));
 }
