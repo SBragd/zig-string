@@ -247,7 +247,7 @@ pub fn String(opt: options) type {
         ///std.debug.print("{s}\n", .{mystr.str()});
         ///```
         pub fn str(self: *const Self) []const u8 {
-            if (self.len() == 0) return "";
+            if (self.size == 0) return "";
             const buffer = self.rawBufBytesConst();
             return buffer[0..self.size];
         }
