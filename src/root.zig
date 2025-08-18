@@ -25,11 +25,13 @@ pub fn String(opt: options) type {
         const internalState = enum {
             alloced,
             buffer,
+            reference,
         };
 
         const StringBuffer = union(internalState) {
             alloced: []u8,
             buffer: [buf_size]u8,
+            reference: []const u8,
         };
 
         /// The allocator used for managing the buffer
@@ -43,6 +45,7 @@ pub fn String(opt: options) type {
         pub const Error = error{
             OutOfMemory,
             InvalidRange,
+            IsReference, // String is borred, function not allowed!
         };
 
         /// Creates a String with an Allocator
@@ -86,7 +89,7 @@ pub fn String(opt: options) type {
                 .alloced => |*a| {
                     self.allocator.free(a.*);
                 },
-                .buffer => return,
+                .reference, .buffer => return,
             }
         }
 
@@ -100,6 +103,7 @@ pub fn String(opt: options) type {
             const ret = switch (self.buffer) {
                 .alloced => |a| a.len,
                 .buffer => |b| b.len,
+                .reference => 0, // There is no capacity to write to the string!
             };
             return ret;
         }
@@ -123,11 +127,13 @@ pub fn String(opt: options) type {
                         return Error.OutOfMemory;
                     };
                 },
+                .reference => return Error.IsReference,
             }
         }
 
-        /// Reallocates the the internal buffer to size
-        /// Moves the string into the preallocated buffer if it fits
+        /// Reallocates the the internal buffer to size.
+        /// Moves the string into the preallocated buffer if it fits.
+        /// Copies a referenced buffer to appropriet buffer.
         pub fn truncate(self: *Self) Error!void {
             switch (self.buffer) {
                 .alloced => |a| {
@@ -144,6 +150,7 @@ pub fn String(opt: options) type {
                 .buffer => |*b| {
                     self.size = b.len;
                 },
+                .reference => return Error.IsReference,
             }
         }
 
@@ -160,6 +167,9 @@ pub fn String(opt: options) type {
                 .buffer => |*b| {
                     return b;
                 },
+                .reference => |*r| {
+                    return r.*;
+                },
             }
         }
 
@@ -171,11 +181,16 @@ pub fn String(opt: options) type {
                 .buffer => |*b| {
                     return b;
                 },
+                .reference => |_| {
+                    @panic("Not allowed to access mutable bytes of referenced string");
+                },
             }
         }
 
         /// Inserts a string literal into the String at an index
         pub fn insert(self: *Self, literal: []const u8, index: usize) Error!void {
+            if (self.buffer == .reference) return Error.IsReference;
+
             if (self.size + literal.len > self.capacity()) {
                 try self.allocate(self.size + literal.len * 2);
             }
@@ -197,7 +212,8 @@ pub fn String(opt: options) type {
         }
 
         /// Removes the last character from the String
-        pub fn pop(self: *Self) ?[]const u8 {
+        pub fn pop(self: *Self) !?[]const u8 {
+            if (self.buffer == .reference) return Error.IsReference;
             if (self.size == 0) return null;
 
             var buffer = self.rawBufBytes();
@@ -227,13 +243,13 @@ pub fn String(opt: options) type {
         }
 
         /// Lexically compares this String with a string literal
-        pub fn cmp(self: *const Self, literal: []const u8) std.math.Order{
-              const buffer = self.rawBufBytesConst();
+        pub fn cmp(self: *const Self, literal: []const u8) std.math.Order {
+            const buffer = self.rawBufBytesConst();
             return std.mem.order(u8, buffer[0..self.size], literal);
         }
 
         /// Lexically compares this String with a string literal
-        pub fn cmpString(self: *const Self, other: *const Self) std.math.Order{
+        pub fn cmpString(self: *const Self, other: *const Self) std.math.Order {
             const buffer = self.rawBufBytesConst();
             const other_buffer = other.rawBufBytesConst();
             return std.mem.order(u8, buffer[0..self.size], other_buffer[0..other.size]);
@@ -319,6 +335,7 @@ pub fn String(opt: options) type {
         /// Removes a range of character from the String
         /// Start (inclusive) - End (Exclusive)
         pub fn removeRange(self: *Self, start: usize, end: usize) Error!void {
+            if (self.buffer == .reference) return Error.IsReference;
             const length = self.len();
             if (end < start or end > length) return Error.InvalidRange;
 
@@ -336,7 +353,8 @@ pub fn String(opt: options) type {
         }
 
         /// Trims all whitelist characters at the start of the String.
-        pub fn trimStart(self: *Self, whitelist: []const u8) void {
+        pub fn trimStart(self: *Self, whitelist: []const u8) Error!void {
+            if (self.buffer == .reference) return Error.IsReference;
             const buffer = self.rawBufBytes();
             var i: usize = 0;
             while (i < self.size) : (i += 1) {
@@ -350,16 +368,18 @@ pub fn String(opt: options) type {
         }
 
         /// Trims all whitelist characters at the end of the String.
-        pub fn trimEnd(self: *Self, whitelist: []const u8) void {
-            self.reverse();
-            self.trimStart(whitelist);
-            self.reverse();
+        pub fn trimEnd(self: *Self, whitelist: []const u8) Error!void {
+            if (self.buffer == .reference) return Error.IsReference;
+            self.reverse() catch unreachable;
+            self.trimStart(whitelist) catch unreachable;
+            self.reverse() catch unreachable;
         }
 
         /// Trims all whitelist characters from both ends of the String
-        pub fn trim(self: *Self, whitelist: []const u8) void {
-            self.trimStart(whitelist);
-            self.trimEnd(whitelist);
+        pub fn trim(self: *Self, whitelist: []const u8) Error!void {
+            if (self.buffer == .reference) return Error.IsReference;
+            self.trimStart(whitelist) catch unreachable;
+            self.trimEnd(whitelist) catch unreachable;
         }
 
         /// Copies this String into a new one
@@ -369,7 +389,8 @@ pub fn String(opt: options) type {
         }
 
         /// Reverses the characters in this String
-        pub fn reverse(self: *Self) void {
+        pub fn reverse(self: *Self) Error!void {
+            if (self.buffer == .reference) return Error.IsReference;
             var buffer = self.rawBufBytes();
             var i: usize = 0;
             while (i < self.size) {
@@ -426,7 +447,7 @@ pub fn String(opt: options) type {
 
         /// Splits the String into slices, based on a delimiter.
         pub fn splitAll(self: *const Self, delimiters: []const u8) ![][]const u8 {
-            var splitArr = std.ArrayList([]const u8).init(std.heap.page_allocator);
+            var splitArr = std.ArrayList([]const u8).init(self.allocator);
             defer splitArr.deinit();
 
             var i: usize = 0;
@@ -452,7 +473,7 @@ pub fn String(opt: options) type {
         /// Splits the String into a slice of new Strings, based on delimiters.
         /// The user of this function is in charge of the memory of the new Strings.
         pub fn splitAllToStrings(self: *const Self, delimiters: []const u8) ![]Self {
-            var splitArr = std.ArrayList(Self).init(std.heap.page_allocator);
+            var splitArr = std.ArrayList(Self).init(self.allocator);
             defer splitArr.deinit();
 
             var i: usize = 0;
@@ -464,8 +485,8 @@ pub fn String(opt: options) type {
         }
 
         /// Splits the String into a slice of Strings by new line (\r\n or \n).
-        pub fn lines(self: *Self) ![]Self {
-            var lineArr = std.ArrayList(Self).init(std.heap.page_allocator);
+        pub fn lines(self: *Self) Error![]Self {
+            var lineArr = std.ArrayList(Self).init(self.allocator);
             defer lineArr.deinit();
 
             var selfClone = try self.clone();
@@ -477,14 +498,16 @@ pub fn String(opt: options) type {
         }
 
         /// Clears the contents of the String but leaves the capacity
-        pub fn clear(self: *Self) void {
+        pub fn clear(self: *Self) Error!void {
+            if (self.buffer == .reference) return Error.IsReference;
             const buffer = self.rawBufBytes();
             @memset(buffer, 0);
             self.size = 0;
         }
 
         /// Converts all (ASCII) uppercase letters to lowercase
-        pub fn toLowercase(self: *Self) void {
+        pub fn toLowercase(self: *Self) Error!void {
+            if (self.buffer == .reference) return Error.IsReference;
             var buffer = self.rawBufBytes();
             var i: usize = 0;
             while (i < self.size) {
@@ -495,7 +518,8 @@ pub fn String(opt: options) type {
         }
 
         /// Converts all (ASCII) uppercase letters to lowercase
-        pub fn toUppercase(self: *Self) void {
+        pub fn toUppercase(self: *Self) Error!void {
+            if (self.buffer == .reference) return Error.IsReference;
             var buffer = self.rawBufBytes();
             var i: usize = 0;
             while (i < self.size) {
@@ -506,7 +530,8 @@ pub fn String(opt: options) type {
         }
 
         // Convert the first (ASCII) character of each word to uppercase
-        pub fn toCapitalized(self: *Self) void {
+        pub fn toCapitalized(self: *Self) Error!void {
+            if (self.buffer == .reference) return Error.IsReference;
             if (self.size == 0) return;
 
             var buffer = self.rawBufBytes();
@@ -626,7 +651,7 @@ pub fn String(opt: options) type {
 
         /// Sets the contents of the String
         pub fn setStr(self: *Self, contents: []const u8) Error!void {
-            self.clear();
+            try self.clear();
             try self.concat(contents);
         }
 
@@ -652,7 +677,8 @@ pub fn String(opt: options) type {
         }
 
         /// Replaces all occurrences of a string literal with another
-        pub fn replace(self: *Self, needle: []const u8, replacement: []const u8) !bool {
+        pub fn replace(self: *Self, needle: []const u8, replacement: []const u8) Error!bool {
+            if (self.buffer == .reference) return Error.IsReference;
             var buffer = self.rawBufBytes();
             const input_size = self.size;
             const size = std.mem.replacementSize(u8, buffer[0..input_size], needle, replacement);
@@ -692,18 +718,30 @@ pub fn String(opt: options) type {
         ///
         /// Allocator is the allocator used to manage the buf, overwrites current allocator of self.
         /// Old buffer is freed and must not be used after this.
-        pub fn assignBuf(self: *Self, allocator: std.mem.Allocator, buf: []u8) !void {
+        pub fn assignBuf(self: *Self, allocator: std.mem.Allocator, buf: []u8) void {
             switch (self.buffer) {
                 .alloced => |*a| {
                     self.allocator.free(a.*);
                     a.* = buf;
                 },
-                .buffer => |_| {
-                    self.buffer = .{ .alloced = buf };
-                },
+                .reference, .buffer => self.buffer = .{ .alloced = buf },
             }
             self.size = buf.len;
             self.allocator = allocator;
+        }
+
+        // Set the String to reference a Slice []const u8 in memory.
+        // The reference is immutable.
+        pub fn referenceBuf(self: *Self, buf: []const u8) void {
+            switch (self.buffer) {
+                .buffer => self.buffer = .{ .reference = buf },
+                .reference => self.buffer = .{ .reference = buf },
+                .alloced => |*a| {
+                    self.allocator.free(a.*);
+                    self.buffer = .{ .reference = buf };
+                },
+            }
+            self.size = buf.len;
         }
     };
 }

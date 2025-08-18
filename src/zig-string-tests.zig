@@ -12,7 +12,7 @@ test "Basic Usage" {
 
     // Use functions provided
     try myString.concat("🔥 Hello!");
-    _ = myString.pop();
+    _ = try myString.pop();
     try myString.concat(", World 🔥");
 
     // Success!
@@ -44,9 +44,9 @@ test "String Tests" {
 
     // pop & length
     try expectEqual(myStr.len(), 9);
-    try expectEqualStrings(myStr.pop().?, "🔥");
+    try expectEqualStrings((try myStr.pop()).?, "🔥");
     try expectEqual(myStr.len(), 8);
-    try expectEqualStrings(myStr.pop().?, "o");
+    try expectEqualStrings((try myStr.pop()).?, "o");
     try expectEqual(myStr.len(), 7);
 
     // str & eql
@@ -78,12 +78,12 @@ test "String Tests" {
 
     // trimStart
     try myStr.insert("      ", 0);
-    myStr.trimStart(whitelist[0..]);
+    try myStr.trimStart(whitelist[0..]);
     try expect(myStr.eql("💯Hel"));
 
     // trimEnd
     _ = try myStr.concat("lo💯\n      ");
-    myStr.trimEnd(whitelist[0..]);
+    try myStr.trimEnd(whitelist[0..]);
     try expect(myStr.eql("💯Hello💯"));
 
     // clone
@@ -92,9 +92,9 @@ test "String Tests" {
     try expect(testStr.eql(myStr.str()));
 
     // reverse
-    myStr.reverse();
+    try myStr.reverse();
     try expect(myStr.eql("💯olleH💯"));
-    myStr.reverse();
+    try myStr.reverse();
     try expect(myStr.eql("💯Hello💯"));
 
     // repeat
@@ -123,6 +123,7 @@ test "String Tests" {
     var splitAllStr = try String.init_with_contents(std.testing.allocator, "THIS IS A  TEST");
     defer splitAllStr.deinit();
     const splitAllSlices = try splitAllStr.splitAll(" ");
+    defer std.testing.allocator.free(splitAllSlices);
 
     try expectEqual(splitAllSlices.len, 5);
     try expectEqualStrings(splitAllSlices[0], "THIS");
@@ -140,9 +141,12 @@ test "String Tests" {
 
     // splitAllToStrings
     var splitAllStrings = try splitAllStr.splitAllToStrings(" ");
-    defer for (splitAllStrings) |*str| {
-        str.deinit();
-    };
+    defer {
+        for (splitAllStrings) |*str| {
+            str.deinit();
+        }
+        std.testing.allocator.free(splitAllStrings);
+    }
 
     try expectEqual(splitAllStrings.len, 5);
     try expectEqualStrings(splitAllStrings[0].str(), "THIS");
@@ -157,9 +161,12 @@ test "String Tests" {
     var lineStr = try String.init_with_contents(std.testing.allocator, lineSlice);
     defer lineStr.deinit();
     var linesSlice = try lineStr.lines();
-    defer for (linesSlice) |*str| {
-        str.deinit();
-    };
+    defer {
+        for (linesSlice) |*str| {
+            str.deinit();
+        }
+        std.testing.allocator.free(linesSlice);
+    }
 
     try expectEqual(linesSlice.len, 3);
     try expect(linesSlice[0].eql("Line0"));
@@ -167,9 +174,9 @@ test "String Tests" {
     try expect(linesSlice[2].eql("Line2"));
 
     // toLowercase & toUppercase
-    myStr.toUppercase();
+    try myStr.toUppercase();
     try expect(myStr.eql("💯HELLO💯💯HELLO💯💯HELLO💯"));
-    myStr.toLowercase();
+    try myStr.toLowercase();
     try expect(myStr.eql("💯hello💯💯hello💯💯hello💯"));
 
     // substr
@@ -178,7 +185,7 @@ test "String Tests" {
     try expect(subStr.eql("💯hello💯"));
 
     // clear
-    myStr.clear();
+    try myStr.clear();
     try expectEqual(myStr.len(), 0);
     try expectEqual(myStr.size, 0);
 
@@ -259,7 +266,7 @@ test "replace Tests" {
     result = try myString.replace("abc", " ");
     try expect(!result);
 
-    myString.clear();
+    try myString.clear();
     try myString.concat("💯hello💯💯hello💯💯hello💯");
     _ = try myString.replace("hello", "hi");
     try expectEqualStrings(myString.str(), "💯hi💯💯hi💯💯hi💯");
@@ -276,7 +283,7 @@ test "toCapitalized Tests" {
     var myString = try String.init_with_contents(std.testing.allocator, "love and be loved");
     defer myString.deinit();
 
-    myString.toCapitalized();
+    try myString.toCapitalized();
 
     try expectEqualStrings(myString.str(), "Love And Be Loved");
 }
@@ -296,7 +303,7 @@ test "includes Tests" {
     try expect(myString.includesLiteral("tiger") == false);
     try expect(myString.includesString(&needle) == false);
 
-    needle.clear();
+    try needle.clear();
 
     try expect(myString.includesLiteral("") == false);
     try expect(myString.includesString(&needle) == false);
@@ -317,12 +324,10 @@ test "cmp and eql Test" {
 }
 
 test "assign Buf" {
-    // Create your String
     var debug_allocator = std.heap.DebugAllocator(.{}){};
     defer expect(debug_allocator.deinit() == .ok) catch @panic("leak");
 
     const gpa = debug_allocator.allocator();
-
     var myString = try String.init_with_contents(std.testing.allocator, "Short string");
     defer myString.deinit();
     try expect(!myString.allocated());
@@ -331,7 +336,7 @@ test "assign Buf" {
     const first_buf = try std.testing.allocator.alloc(u8, 128);
     const a_str = &[_]u8{'a'} ** 128;
     std.mem.copyForwards(u8, first_buf, a_str);
-    try myString.assignBuf(std.testing.allocator, first_buf);
+    myString.assignBuf(std.testing.allocator, first_buf);
 
     try expect(myString.allocated());
     try expect(myString.eql(&[_]u8{'a'} ** 128));
@@ -340,7 +345,7 @@ test "assign Buf" {
     const second_buf = try std.testing.allocator.alloc(u8, 128);
     const b_str = &[_]u8{'b'} ** 128;
     std.mem.copyForwards(u8, second_buf, b_str);
-    try myString.assignBuf(std.testing.allocator, second_buf);
+    myString.assignBuf(std.testing.allocator, second_buf);
     try expect(myString.allocated());
     try expect(myString.eql(&[_]u8{'b'} ** 128));
 
@@ -348,8 +353,34 @@ test "assign Buf" {
     const third_buf = try gpa.alloc(u8, 128);
     const c_str = &[_]u8{'c'} ** 128;
     std.mem.copyForwards(u8, third_buf, c_str);
-    try myString.assignBuf(gpa, third_buf);
+    myString.assignBuf(gpa, third_buf);
 
     try expect(myString.allocated());
     try expect(myString.eql(&[_]u8{'c'} ** 128));
+}
+
+test "reference Buf" {
+    // Create your String
+    var myString = String.init(std.testing.allocator);
+    var myString2 = try String.init_with_contents(std.testing.allocator, "Short string");
+    defer myString.deinit();
+    defer myString2.deinit();
+    try expect(!myString.allocated());
+    const foo = "Hello, World 🔥";
+
+    myString.referenceBuf(foo);
+    myString2.referenceBuf(foo);
+    try expect(myString.eql(foo));
+    try expect(myString2.eql(foo));
+    try expectEqual(foo, myString.buffer.reference);
+    try expectEqual(foo, myString2.buffer.reference);
+    try expectEqual(myString.buffer.reference, myString.buffer.reference);
+    try std.testing.expectError(String.Error.IsReference, myString.pop());
+
+    myString = try myString.clone();
+    myString2 = try myString.clone();
+    try expect(myString.eql(foo));
+    try expect(myString2.eql(foo));
+    try expect(myString.eqlString(&myString2));
+    try expect(myString.buffer.alloced.ptr != myString2.buffer.alloced.ptr);
 }
