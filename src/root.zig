@@ -657,7 +657,7 @@ pub fn String(opt: options) type {
 
         /// Checks the start of the string against a literal
         pub fn startsWith(self: *Self, literal: []const u8) bool {
-            const buffer = self.rawBufBytes();
+            const buffer = self.rawBufBytesConst();
             const index = std.mem.indexOf(u8, buffer[0..self.size], literal);
             if (index) |i| {
                 return i == 0;
@@ -667,7 +667,7 @@ pub fn String(opt: options) type {
 
         /// Checks the end of the string against a literal
         pub fn endsWith(self: *Self, literal: []const u8) bool {
-            const buffer = self.rawBufBytes();
+            const buffer = self.rawBufBytesConst();
             const index = std.mem.lastIndexOf(u8, buffer[0..self.size], literal);
             const i: usize = self.size - literal.len;
             if (index) |j| {
