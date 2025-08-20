@@ -69,12 +69,24 @@ pub fn String(opt: options) type {
             };
         }
 
-        pub fn init_with_contents(allocator: std.mem.Allocator, contents: []const u8) Error!Self {
+        pub fn initWithContents(allocator: std.mem.Allocator, contents: []const u8) Error!Self {
             var self = init(allocator);
 
             try self.concat(contents);
 
             return self;
+        }
+        pub fn initReference(buf: []const u8) Self {
+            // for windows non-ascii characters
+            // check if the system is windows
+            if (builtin.os.tag == std.Target.Os.Tag.windows) {
+                _ = std.os.windows.kernel32.SetConsoleOutputCP(65001);
+            }
+            return .{
+                .allocator = undefined,
+                .buffer = StringBuffer{ .reference = buf },
+                .size = buf.len,
+            };
         }
 
         /// Deallocates the internal buffer
@@ -385,7 +397,7 @@ pub fn String(opt: options) type {
         /// Copies this String into a new one
         /// User is responsible for managing the new String
         pub fn clone(self: *const Self) Error!Self {
-            return init_with_contents(self.allocator, self.str());
+            return initWithContents(self.allocator, self.str());
         }
 
         /// Reverses the characters in this String

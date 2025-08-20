@@ -120,7 +120,7 @@ test "String Tests" {
     try expectEqualStrings(splitStr.split("=", 1).?, "'value'");
 
     // splitAll
-    var splitAllStr = try String.init_with_contents(std.testing.allocator, "THIS IS A  TEST");
+    var splitAllStr = try String.initWithContents(std.testing.allocator, "THIS IS A  TEST");
     defer splitAllStr.deinit();
     const splitAllSlices = try splitAllStr.splitAll(" ");
     defer std.testing.allocator.free(splitAllSlices);
@@ -158,7 +158,7 @@ test "String Tests" {
     // lines
     const lineSlice = "Line0\r\nLine1\nLine2";
 
-    var lineStr = try String.init_with_contents(std.testing.allocator, lineSlice);
+    var lineStr = try String.initWithContents(std.testing.allocator, lineSlice);
     defer lineStr.deinit();
     var linesSlice = try lineStr.lines();
     defer {
@@ -224,7 +224,7 @@ test "init with contents" {
     const initial_contents = "String with initial contents!";
 
     // This is how we create the String with contents at the start
-    var myStr = try String.init_with_contents(std.testing.allocator, initial_contents);
+    var myStr = try String.initWithContents(std.testing.allocator, initial_contents);
     defer myStr.deinit();
     try expectEqualStrings(myStr.str(), initial_contents);
 }
@@ -273,14 +273,14 @@ test "replace Tests" {
 }
 
 test "rfind Tests" {
-    var myString = try String.init_with_contents(std.testing.allocator, "💯hi💯💯hi💯💯hi💯");
+    var myString = try String.initWithContents(std.testing.allocator, "💯hi💯💯hi💯💯hi💯");
     defer myString.deinit();
 
     try expectEqual(myString.rfind("hi"), 9);
 }
 
 test "toCapitalized Tests" {
-    var myString = try String.init_with_contents(std.testing.allocator, "love and be loved");
+    var myString = try String.initWithContents(std.testing.allocator, "love and be loved");
     defer myString.deinit();
 
     try myString.toCapitalized();
@@ -289,10 +289,10 @@ test "toCapitalized Tests" {
 }
 
 test "includes Tests" {
-    var myString = try String.init_with_contents(std.testing.allocator, "love and be loved");
+    var myString = try String.initWithContents(std.testing.allocator, "love and be loved");
     defer myString.deinit();
 
-    var needle = try String.init_with_contents(std.testing.allocator, "be");
+    var needle = try String.initWithContents(std.testing.allocator, "be");
     defer needle.deinit();
 
     try expect(myString.includesLiteral("and"));
@@ -310,9 +310,9 @@ test "includes Tests" {
 }
 
 test "cmp and eql Test" {
-    var myString = try String.init_with_contents(std.testing.allocator, "aba");
+    var myString = try String.initWithContents(std.testing.allocator, "aba");
     defer myString.deinit();
-    var otherString = try String.init_with_contents(std.testing.allocator, "bab");
+    var otherString = try String.initWithContents(std.testing.allocator, "bab");
     defer myString.deinit();
 
     try expect(myString.eql(myString.str()));
@@ -328,7 +328,7 @@ test "assign Buf" {
     defer expect(debug_allocator.deinit() == .ok) catch @panic("leak");
 
     const gpa = debug_allocator.allocator();
-    var myString = try String.init_with_contents(std.testing.allocator, "Short string");
+    var myString = try String.initWithContents(std.testing.allocator, "Short string");
     defer myString.deinit();
     try expect(!myString.allocated());
 
@@ -362,7 +362,7 @@ test "assign Buf" {
 test "reference Buf" {
     // Create your String
     var myString = String.init(std.testing.allocator);
-    var myString2 = try String.init_with_contents(std.testing.allocator, "Short string");
+    var myString2 = try String.initWithContents(std.testing.allocator, "Short string");
     defer myString.deinit();
     defer myString2.deinit();
     try expect(!myString.allocated());
